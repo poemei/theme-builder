@@ -1,0 +1,12 @@
+{
+    "module": "theme_builder",
+    "name": "Theme Builder",
+    "version": "0.1.0",
+    "description": "Admin-only ChAoS MVC theme workspace and release builder.",
+    "routes": [],
+    "files": [
+        "controllers/theme_builder.php",
+        "lib/theme_package_builder.php",
+        "views/admin/index.php"
+    ]
+}
