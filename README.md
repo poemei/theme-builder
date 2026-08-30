@@ -137,6 +137,9 @@ The project is being rebuilt using the established Module Builder workflow as it
 
 ---
 
+## Documentation
+[CHANGELOG](docs/CHANGELOG.md)
+
 ## ChAoS MVC
 
 Theme Builder is part of the ChAoS MVC developer ecosystem.
