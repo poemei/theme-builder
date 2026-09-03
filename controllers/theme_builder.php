@@ -32,6 +32,16 @@ class theme_builder extends controller
 
         $selected = trim((string) ($_REQUEST['project'] ?? ''));
         $selected = $builder->isValidSlug($selected) ? $selected : '';
+        $downloadArtifact = trim((string) ($_GET['download_artifact'] ?? ''));
+
+        if ($selected !== '' && $downloadArtifact !== '') {
+            try {
+                $this->downloadArtifact($builder->artifactFile($selected, $downloadArtifact));
+            } catch (Throwable $exception) {
+                http_response_code(404);
+                $error = $exception->getMessage();
+            }
+        }
 
         $path = trim((string) ($_REQUEST['path'] ?? ''));
         $content = null;
@@ -88,6 +98,11 @@ class theme_builder extends controller
                 $_REQUEST['project'] = '';
                 return 'Theme project deleted.';
 
+            case 'delete_data':
+                $builder->deleteData();
+                $_REQUEST['project'] = '';
+                return 'Theme Builder data deleted. Module preserved.';
+
             case 'save_file':
                 $builder->writeFile(
                     $project,
@@ -130,6 +145,17 @@ class theme_builder extends controller
         }
 
         throw new InvalidArgumentException('Unknown action.');
+    }
+
+    private function downloadArtifact(string $file): never
+    {
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($file) . '"');
+        header('Content-Length: ' . (string) filesize($file));
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        readfile($file);
+        exit;
     }
 }
 /* [End AI:GPT-5.6 Sol] */

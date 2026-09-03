@@ -1,0 +1,22 @@
+# Module Builder key-generation configuration.
+# /* [AI:GPT-5.6 Sol | 2026-08-29 03:55:00 UTC] */
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+
+[provider_sect]
+default = default_sect
+
+[default_sect]
+activate = 1
+
+[req]
+distinguished_name = req_distinguished_name
+
+[req_distinguished_name]
+
+[v3_ca]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature
+# /* [End AI:GPT-5.6 Sol] */

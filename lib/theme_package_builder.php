@@ -59,6 +59,7 @@ class theme_package_builder
                 'name' => (string) ($project['name'] ?? $slug),
                 'version' => (string) ($project['version'] ?? '0.0.0'),
                 'description' => (string) ($project['description'] ?? ''),
+                'signing' => is_array($project['signing'] ?? null) ? $project['signing'] : [],
             ];
         }
 
@@ -110,6 +111,13 @@ class theme_package_builder
                 'name' => $name,
                 'version' => $version,
                 'description' => $description,
+                'signing' => [
+                    'type' => 'sha256',
+                    'fingerprint' => '',
+                    'sha256' => hash('sha256', random_bytes(32)),
+                    'key_id' => '',
+                    'public_key' => '',
+                ],
             ];
             $this->saveProjectMetadata($metadata);
         } catch (Throwable $exception) {
@@ -132,10 +140,30 @@ class theme_package_builder
         $this->validateMetadata($slug, $name, $version);
 
         $metadata = $this->projectMetadata();
+        $existingSigning = is_array($metadata[$slug]['signing'] ?? null)
+            ? $metadata[$slug]['signing']
+            : [];
+        $signingInput = $input;
+
+        foreach (
+            [
+                'signing_type' => 'type',
+                'signing_fingerprint' => 'fingerprint',
+                'signing_sha256' => 'sha256',
+                'signing_key_id' => 'key_id',
+                'signing_public_key' => 'public_key',
+            ] as $inputKey => $metadataKey
+        ) {
+            if (!array_key_exists($inputKey, $signingInput)) {
+                $signingInput[$inputKey] = $existingSigning[$metadataKey] ?? '';
+            }
+        }
+
         $metadata[$slug] = [
             'name' => $name,
             'version' => $version,
             'description' => $description,
+            'signing' => $this->signingMetadata($signingInput),
         ];
 
         $this->saveProjectMetadata($metadata);
@@ -378,6 +406,7 @@ class theme_package_builder
                     'version' => $metadata['version'],
                     'artifact' => basename($zipPath),
                     'sha256' => $hash,
+                    'signing' => $metadata['signing'],
                     'signed' => false,
                     'built_at' => gmdate('c'),
                 ]
@@ -417,6 +446,51 @@ class theme_package_builder
         );
 
         return $artifacts;
+    }
+
+    public function artifactFile(string $slug, string $name): string
+    {
+        if ($name !== basename($name) || !preg_match('/^[A-Za-z0-9._-]{1,240}$/', $name)) {
+            throw new InvalidArgumentException('Invalid artifact.');
+        }
+
+        $root = $this->artifactRoot($slug, false);
+        $resolvedRoot = is_link($root) ? false : realpath($root);
+        $candidate = $root . '/' . $name;
+        $resolved = is_link($candidate) ? false : realpath($candidate);
+
+        if (
+            $resolvedRoot === false
+            || $resolved === false
+            || !str_starts_with($resolved, $resolvedRoot . DIRECTORY_SEPARATOR)
+            || !is_file($resolved)
+        ) {
+            throw new RuntimeException('Artifact was not found.');
+        }
+
+        return $resolved;
+    }
+
+    public function deleteData(): void
+    {
+        $metadata = $this->projectMetadata();
+
+        foreach (array_keys($metadata) as $slug) {
+            if (!is_string($slug) || !$this->isValidSlug($slug)) {
+                continue;
+            }
+
+            $themeRoot = $this->root($slug);
+            $artifactRoot = $this->artifactRoot($slug, false);
+
+            if (is_dir($artifactRoot) && !is_link($artifactRoot)) {
+                $this->remove($artifactRoot);
+            }
+
+            $this->remove($themeRoot);
+        }
+
+        $this->saveProjectMetadata([]);
     }
 
     public function certificationStatus(): array
@@ -528,6 +602,7 @@ class theme_package_builder
             'name' => (string) ($project['name'] ?? $slug),
             'version' => (string) ($project['version'] ?? '0.0.0'),
             'description' => (string) ($project['description'] ?? ''),
+            'signing' => is_array($project['signing'] ?? null) ? $project['signing'] : [],
         ];
     }
 
@@ -652,6 +727,46 @@ class theme_package_builder
         if (!preg_match('/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/', $version)) {
             throw new InvalidArgumentException('Semantic version required.');
         }
+    }
+
+    private function signingMetadata(array $input): array
+    {
+        $type = strtolower(trim((string) ($input['signing_type'] ?? 'sha256')));
+        $fingerprint = trim((string) ($input['signing_fingerprint'] ?? ''));
+        $sha256 = strtolower(trim((string) ($input['signing_sha256'] ?? '')));
+        if ($sha256 === '') {
+            $sha256 = hash('sha256', random_bytes(32));
+        }
+        $keyId = strtolower(trim((string) ($input['signing_key_id'] ?? '')));
+        $publicKey = preg_replace('/\s+/', '', trim((string) ($input['signing_public_key'] ?? '')));
+        $publicKey = is_string($publicKey) ? $publicKey : '';
+
+        if (!in_array($type, ['sha256', 'rsa-sha256', 'openpgp'], true)) {
+            throw new InvalidArgumentException('Signing type must be SHA-256, RSA-SHA256, or OpenPGP.');
+        }
+        if (strlen($fingerprint) > 255) {
+            throw new InvalidArgumentException('Signing fingerprint must not exceed 255 characters.');
+        }
+        if (preg_match('/^[a-f0-9]{64}$/', $sha256) !== 1) {
+            throw new InvalidArgumentException('Signing SHA-256 is required.');
+        }
+        if ($keyId !== '' && preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/', $keyId) !== 1) {
+            throw new InvalidArgumentException('Signing key ID is invalid.');
+        }
+        if (($keyId === '') !== ($publicKey === '')) {
+            throw new InvalidArgumentException('Signing key ID and public key must be supplied together.');
+        }
+        if ($publicKey !== '' && base64_decode($publicKey, true) === false) {
+            throw new InvalidArgumentException('Signing public key must be compact base64 data.');
+        }
+
+        return [
+            'type' => $type,
+            'fingerprint' => $fingerprint,
+            'sha256' => $sha256,
+            'key_id' => $keyId,
+            'public_key' => $publicKey,
+        ];
     }
 
     private function artifactRoot(string $slug, bool $create): string

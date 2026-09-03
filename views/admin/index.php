@@ -1,5 +1,8 @@
 <?php
-/* [AI:GPT-5.6 Sol | 2026-08-29 02:00:00 UTC] */
+if (!theme::render('head', get_defined_vars())) {
+    require APPROOT . '/views/inc/head.php';
+}
+
 $escape = static fn($value): string => htmlspecialchars(
     (string) $value,
     ENT_QUOTES,
@@ -16,7 +19,7 @@ $current = $projectMap[$selected] ?? null;
 <main class="container-fluid py-4">
     <div class="d-flex justify-content-between mb-4">
         <div>
-            <h1>Theme Builder <small class="text-muted">0.1.0</small></h1>
+            <h1>Theme Builder <small class="text-muted">0.3.0</small></h1>
             <p>
                 Live source: <code>user/themes/&lt;slug&gt;/</code>.
                 Output: root <code>/releases/&lt;slug&gt;/</code>.
@@ -135,6 +138,48 @@ $current = $projectMap[$selected] ?? null;
                             <label class="form-label">
                                 Description
                                 <textarea class="form-control" name="description"><?= $escape($current['description']); ?></textarea>
+                            </label>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                Signing type
+                                <select class="form-select" name="signing_type">
+                                    <?php foreach (['sha256' => 'SHA-256', 'rsa-sha256' => 'RSA / SHA-256', 'openpgp' => 'OpenPGP'] as $value => $label): ?>
+                                        <option value="<?= $value; ?>" <?= ($current['signing']['type'] ?? 'sha256') === $value ? 'selected' : ''; ?>>
+                                            <?= $label; ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label">
+                                PGP fingerprint <span class="text-muted">(optional)</span>
+                                <input class="form-control" name="signing_fingerprint" maxlength="255" value="<?= $escape($current['signing']['fingerprint'] ?? ''); ?>">
+                            </label>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">
+                                SHA-256
+                                <input class="form-control font-monospace" name="signing_sha256" required pattern="[a-fA-F0-9]{64}" value="<?= $escape($current['signing']['sha256'] ?? ''); ?>">
+                            </label>
+                            <div class="form-text">Every theme project has a SHA-256 identity. Release ZIPs receive their own content hash when built.</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                Key ID <span class="text-muted">(optional)</span>
+                                <input class="form-control" name="signing_key_id" value="<?= $escape($current['signing']['key_id'] ?? ''); ?>">
+                            </label>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label">
+                                Public key <span class="text-muted">(optional compact base64)</span>
+                                <textarea class="form-control font-monospace" name="signing_public_key" rows="4"><?= $escape($current['signing']['public_key'] ?? ''); ?></textarea>
                             </label>
                         </div>
 
@@ -269,7 +314,9 @@ $current = $projectMap[$selected] ?? null;
                                 <ul class="list-group">
                                     <?php foreach ($artifacts as $artifact): ?>
                                         <li class="list-group-item d-flex justify-content-between">
-                                            <span><?= $escape($artifact['name']); ?></span>
+                                            <a href="/admin/theme_builder?project=<?= rawurlencode($selected); ?>&amp;download_artifact=<?= rawurlencode($artifact['name']); ?>">
+                                                <?= $escape($artifact['name']); ?>
+                                            </a>
                                             <small><?= number_format($artifact['size']); ?> bytes</small>
                                         </li>
                                     <?php endforeach; ?>
@@ -322,5 +369,32 @@ $current = $projectMap[$selected] ?? null;
             <?php endif; ?>
         </section>
     </div>
+
+    <section class="card border-danger mt-4">
+        <div class="card-header fw-bold">Module / Data Lifecycle</div>
+        <div class="card-body">
+            <p class="text-muted">
+                Delete Data removes every Theme Builder-managed theme project, its saved project metadata,
+                and its generated artifacts while preserving this module. Nuke delegates full removal to ChAoS MVC Core.
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" onsubmit="return confirm('Delete all Theme Builder-managed themes, metadata, and artifacts?');">
+                    <?= $csrf_field; ?>
+                    <input type="hidden" name="action" value="delete_data">
+                    <button class="btn btn-outline-danger">Delete Data</button>
+                </form>
+
+                <form method="post" action="/admin/uninstall" onsubmit="return confirm('Nuke Theme Builder through ChAoS MVC Core?');">
+                    <?= $csrf_field; ?>
+                    <input type="hidden" name="module" value="theme_builder">
+                    <button class="btn btn-danger">Nuke Module</button>
+                </form>
+            </div>
+        </div>
+    </section>
 </main>
-<?php /* [End AI:GPT-5.6 Sol] */ ?>
+<?php 
+if (!theme::render('foot', get_defined_vars())) {
+    require APPROOT . '/views/inc/foot.php';
+}
+?>

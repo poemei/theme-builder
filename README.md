@@ -4,6 +4,8 @@
 
 The **ChAoS MVC Theme Builder** is a developer tool for creating, managing, and packaging themes for the ChAoS MVC platform.
 
+Current version: **0.3.0**.
+
 It provides a standardized development workflow so themes are built against the expected ChAoS MVC theme structure rather than assembled manually or according to developer-specific conventions.
 
 ---
@@ -18,6 +20,7 @@ Theme Builder provides a workspace for developing ChAoS MVC themes, including:
 - Deleting projects
 - Building standard ChAoS MVC theme structures
 - Creating distributable theme artifacts
+- Downloading generated artifacts from the authenticated project screen
 - Preparing themes for certification and release
 
 Theme projects are created using the standard ChAoS MVC theme layout and conventions.
@@ -95,6 +98,20 @@ In other words:
 
 Certified developers may sign eligible release artifacts using their ChAoS MVC developer identity.
 
+Every new theme project receives a required SHA-256 identity. Project settings use the canonical signing object:
+
+```json
+{
+  "type": "sha256",
+  "fingerprint": "",
+  "sha256": "64 lowercase hexadecimal characters",
+  "key_id": "",
+  "public_key": ""
+}
+```
+
+`type` may be `sha256`, `rsa-sha256`, or `openpgp`. A PGP fingerprint is optional. A public RSA or OpenPGP key may be stored as compact base64 when accompanied by its key ID. The project identity SHA-256 is metadata; each built ZIP also receives a separately calculated content SHA-256 in its release manifest and `.sha256` file.
+
 Private signing keys are not intended to become ordinary Theme Builder project files or be stored casually on the hosting server.
 
 Certification and signing remain distinct from theme creation itself.
@@ -126,6 +143,15 @@ Theme Builder operates outside the protected ChAoS MVC Core.
 The builder creates and manages developer-owned theme resources without requiring modifications to the framework's protected architecture.
 
 > **Protect the core. Grow outward.**
+
+## Module / Data Lifecycle
+
+Theme Builder is a generic, file-backed module and does not create SQL tables. Its lifecycle controls cover the data it actually owns:
+
+- **Delete Data** removes all Theme Builder-managed theme directories, saved project metadata, and generated artifacts while preserving Theme Builder itself.
+- **Nuke Module** submits the standard `/admin/uninstall` request so ChAoS MVC Core remains responsible for complete module removal.
+
+Individual theme projects can still be deleted independently. No Core files are changed by Theme Builder.
 
 ---
 

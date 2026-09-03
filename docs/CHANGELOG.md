@@ -6,6 +6,34 @@ The format follows the development progression of the Theme Builder project.
 
 ---
 
+## [0.3.0] - 2026-09-02
+
+### Added
+
+- Added Module / Data Lifecycle controls for module-owned theme projects, metadata, and release artifacts.
+- Added standard ChAoS MVC Core Nuke delegation through `/admin/uninstall`.
+- Added a required SHA-256 identity to every newly created theme project.
+- Added canonical signing metadata with `type`, `fingerprint`, `sha256`, `key_id`, and `public_key` fields.
+- Added optional OpenPGP signing identity support, including an optional fingerprint or public key.
+- Added authenticated download links for generated project artifacts.
+- Added path-confined artifact resolution for downloads.
+
+### Changed
+
+- Bumped Theme Builder to version 0.3.0.
+- Release manifests now include the theme project's canonical signing metadata alongside the artifact's calculated SHA-256.
+- Saving ordinary project metadata now preserves the existing signing identity unless signing fields are explicitly changed.
+- Documented Theme Builder as a generic, file-backed module with no SQL lifecycle.
+
+### Security
+
+- Artifact downloads remain behind the existing administrator authorization boundary.
+- Public key metadata is accepted only as strict compact base64 and must be paired with a valid key ID.
+- Delete Data is limited to theme slugs tracked in Theme Builder's own metadata.
+- No ChAoS MVC Core files were modified.
+
+---
+
 ## [0.2.0] - 2026-08-30
 
 ### Added
