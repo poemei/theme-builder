@@ -64,7 +64,9 @@ class theme_builder extends controller
                 'content' => $content,
                 'validation' => $selected !== '' ? $builder->validateProject($selected) : null,
                 'artifacts' => $selected !== '' ? $builder->listArtifacts($selected) : [],
-                'certification' => $builder->certificationStatus(),
+                'certification' => $builder->certificationStatus($selected),
+                'builder_config' => $builder->builderConfig(),
+                'config_required' => $builder->configRequired(),
                 'message' => $message,
                 'error' => $error,
                 'csrf_field' => $this->csrf_field(),
@@ -85,6 +87,9 @@ class theme_builder extends controller
         $project = (string) ($_POST['project'] ?? '');
 
         switch ($action) {
+            case 'save_builder_config':
+                $builder->saveBuilderConfig($_POST);
+                return 'Builder configuration saved. Certification status is shown separately.';
             case 'create_project':
                 $builder->createProject($_POST);
                 return 'Theme project created.';
@@ -135,13 +140,14 @@ class theme_builder extends controller
                 return 'Unsigned theme release built: '
                     . basename($builder->buildRelease($project));
 
-            case 'sign_release':
-                $builder->signRelease(
+            case 'build_and_sign':
+                $artifact = $builder->buildAndSignRelease(
                     $project,
-                    (string) $_POST['artifact'],
-                    $_FILES['private_key'] ?? []
+                    $_FILES['private_key'] ?? [],
+                    (string) ($_POST['private_key_passphrase'] ?? ''),
+                    (string) ($_POST['download_url'] ?? '')
                 );
-                return 'Theme release signed; key not retained.';
+                return 'Current theme built and signed: ' . basename($artifact) . '. Saved files and local release-data copies verified; key not retained. Developer-domain publication is still required; the domain has not been checked.';
         }
 
         throw new InvalidArgumentException('Unknown action.');

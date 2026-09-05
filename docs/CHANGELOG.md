@@ -1,5 +1,81 @@
 # Changelog
 
+## [0.4.8] - 2026-09-04
+
+- Prefer PHP cURL with verified TLS for hosted certification requests and retain HTTPS streams as a fallback.
+
+## [0.4.7] - 2026-09-04
+
+- Add one-time, module-owned certification configuration under `data/`.
+- Verify and preload the account public key; never store the private key.
+- Hide setup after valid configuration and restore it when configuration data is missing.
+- Apply the configured developer identity automatically to new theme projects.
+
+## [0.4.6] - 2026-09-04
+
+- Replace the legacy certification protocol with the shared read-only `/developers/verify` contract.
+- Verify exact developer, domain, theme credential, algorithm, key ID, active result, and expiry before writing `certified: "Yes"`.
+- Keep certification at `No` for mismatch, expiry, malformed response, or unavailable service without disabling Builder or signing work.
+- Add per-project signing identity onboarding; verified account responses may preload the public key and OpenPGP fingerprint.
+- Cache verified assertions for up to 24 hours and negative assertions for up to five minutes; stale success is never accepted.
+- Never request, transmit, cache, or import private keys from certification.
+- Document certification and cryptographic release signing as separate trust relationships.
+
+## [0.4.5] - 2026-09-04
+
+- Write the entered developer domain into every generated local `theme.json`, normalized to lowercase.
+- Write the form's certification selection as the exact local JSON string `"Yes"` or `"No"`.
+- Preserve domain and certification across ordinary project edits.
+- Keep certification metadata independent from publisher signing-key configuration.
+
+## [0.4.4] - 2026-09-04
+
+- Remove the manual ZIP-name field from the admin signing flow.
+- Build and sign the selected theme as one transaction: refresh theme.json, package current files, locate the resulting ZIP internally, sign it, then run all verification gates.
+- Preflight publication policy and the required crypto backend before replacing the current project artifact.
+- Retain the lower-level existing-artifact signing method for compatibility, but do not expose it through admin.
+
+## [0.4.3] - 2026-09-04
+
+- Gate signing on the actual PHP crypto backend, not assumptions about the host OS.
+- Reopen and verify saved JSON, signature, statement, and ZIP using public-key trust before reporting success.
+- Copy only public release files into project release data under verified/<release-identity>/; verify the copies and reject conflicting existing files.
+- Record and display build-time verification results separately from unchecked public-domain availability.
+- Add tamper tests for saved outputs, copied releases, and ZIP checksums.
+
+## [0.4.2] - 2026-09-04
+
+- Apply DEV_SIGNATURE_OPENSSL.md: generated local manifests use signing.algorithm and base64 public PEM trust.
+- Emit separate <slug>.remote.json with exactly Core's six signed release fields for the developer's update_url.
+- Emit binary ZIP.sig and exact LF/no-trailing-newline release statement for OpenSSL verification.
+- Remove stale remote JSON and statement on rebuild; preserve automatic project identifiers and lifecycle scaffolding.
+- Test generated publication JSON against the local Core verifier.
+
+## [0.4.1] - 2026-09-04
+
+- Restore automatic SHA-256 project identity generation on creation, with a matching fingerprint.
+- Preserve generated identity during ordinary settings edits; keep ZIP checksums and Core-compatible release signatures separate.
+
+## [0.4.0] - 2026-09-04
+
+- Match Core 98613e2 signed release statements, including exact download URL and embedded base64 signature.
+- Implement real OpenPGP detached signing using PHP GnuPG 1.5+ and isolated temporary keyrings.
+- Enforce RSA-3072+ and matching public/private keys; remove certification as a publisher-signing gate.
+- Sign metadata inside the selected ZIP, not later edits to the live theme.
+- Add update_url, creator, and package_hosts settings to generated theme.json.
+- Refresh theme.json file inventory on build while preserving additional fields.
+- Validate package limits/paths/PHP syntax before signing and invalidate stale signatures on rebuild.
+- Add integration tests using Core's actual signature and archive validators.
+
+## [0.3.1] - 2026-09-04
+
+- Generate and maintain theme.json on project creation/settings save; include it in release ZIPs and backfill missing manifests on build.
+- Read theme.json as the theme metadata source and preserve additional fields when saving settings.
+- Separate unsigned integrity hashing from RSA-SHA256/OpenPGP algorithm selection; stop generating random SHA-256 identities.
+- Record and display actual RSA signatures and algorithms in release manifests/artifact feedback.
+- Require the RSA private key to match the configured public key; explicitly identify OpenPGP as metadata support, not built-in signing.
+- Test generated and packaged manifests, hash correctness, and unsigned OpenPGP metadata behavior.
+
 All notable changes to the ChAoS MVC Theme Builder are documented in this file.
 
 The format follows the development progression of the Theme Builder project.

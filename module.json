@@ -1,13 +1,13 @@
 {
     "module": "theme_builder",
     "name": "Theme Builder",
-    "version": "0.3.0",
+    "version": "0.4.10",
     "description": "Admin-only ChAoS MVC theme workspace and release builder.",
 	"creator": "PM",
   "domain": "www.poemei.com",
   "certified": "Yes",
   "signing": {
-    "type": "rsa-sha256",
+        "algorithm": "rsa-sha256",
     "fingerprint": "aab3866b2f02eab50c716f87424191734281dd7e7644a1ca09549b021768c94a",
     "sha256": "aab3866b2f02eab50c716f87424191734281dd7e7644a1ca09549b021768c94a",
     "key_id": "pm-aab3866b2f02eab5",
@@ -17,8 +17,13 @@
     "files": [
         "controllers/theme_builder.php",
         "lib/theme_package_builder.php",
+        "lib/builder_release_signer.php",
+        "lib/builder_certification_client.php",
+        "data/.gitkeep",
         "views/admin/index.php",
         "docs/CHANGELOG.md",
+        "docs/CORE_RELEASE_CONTRACT.md",
+        "docs/CERTIFICATION.md",
         "README.md"
     ]
 }

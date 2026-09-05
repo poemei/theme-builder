@@ -1,4 +1,10 @@
 <?php
+if (!class_exists('builder_release_signer', false)) {
+    require_once __DIR__ . '/builder_release_signer.php';
+}
+if (!class_exists('builder_certification_client', false)) {
+    require_once __DIR__ . '/builder_certification_client.php';
+}
 /* [AI:GPT-5.6 Sol | 2026-08-29 02:00:00 UTC] */
 class theme_package_builder
 {
@@ -20,19 +26,65 @@ class theme_package_builder
     private string $themes;
     private string $releases;
     private string $metadataFile;
+    private string $configFile;
 
     public function __construct(
         ?string $themes = null,
         ?string $releases = null,
-        ?string $metadataFile = null
+        ?string $metadataFile = null,
+        ?string $configFile = null
     ) {
         $this->themes = $themes ?? USERROOT . '/themes';
         $this->releases = $releases ?? dirname(USERROOT) . '/releases';
         $this->metadataFile = $metadataFile ?? USERROOT . '/data/theme_builder_projects.json';
+        $this->configFile = $configFile ?? __DIR__ . '/../data/certification.json';
 
         $this->makeDirectory($this->themes);
         $this->makeDirectory($this->releases);
         $this->makeDirectory(dirname($this->metadataFile));
+        $this->makeDirectory(dirname($this->configFile));
+    }
+
+    public function builderConfig(): array
+    {
+        return $this->readJson($this->configFile, false);
+    }
+
+    public function configRequired(): bool
+    {
+        $config = $this->builderConfig();
+        foreach (['developer', 'domain', 'algorithm', 'key_id', 'transport_key'] as $field) {
+            if (!is_string($config[$field] ?? null) || $config[$field] === '') return true;
+        }
+        return preg_match('/^[a-f0-9]{64}$/', (string) $config['transport_key']) !== 1;
+    }
+
+    public function saveBuilderConfig(array $input): void
+    {
+        $existing = $this->builderConfig();
+        $developer = trim((string) ($input['developer'] ?? ''));
+        $domain = strtolower(trim((string) ($input['domain'] ?? '')));
+        $algorithm = strtolower(trim((string) ($input['algorithm'] ?? '')));
+        $keyId = strtolower(trim((string) ($input['key_id'] ?? '')));
+        $transportKey = strtolower(trim((string) ($input['transport_key'] ?? $existing['transport_key'] ?? '')));
+        if ($developer === '' || filter_var('https://' . $domain, FILTER_VALIDATE_URL) === false
+            || !in_array($algorithm, ['rsa-sha256', 'openpgp'], true)
+            || !preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/', $keyId)
+            || !preg_match('/^[a-f0-9]{64}$/', $transportKey)) {
+            throw new InvalidArgumentException('Enter a valid developer, domain, signing algorithm, key ID, and transport key.');
+        }
+        $base = ['developer' => $developer, 'domain' => $domain, 'algorithm' => $algorithm,
+            'key_id' => $keyId, 'transport_key' => $transportKey];
+        $this->write($this->configFile, $this->encode($base));
+        $result = (new builder_certification_client($this->releases . '/.certification-cache'))
+            ->verify($developer, $domain, 'theme', $algorithm, $keyId);
+        $this->write($this->configFile, $this->encode($base + [
+            'public_key' => is_string($result['public_key'] ?? null) ? $result['public_key'] : '',
+            'fingerprint' => (string) ($result['fingerprint'] ?? ''),
+            'credential_id' => (string) ($result['credential_id'] ?? ''),
+            'verification_state' => (string) ($result['state'] ?? 'unavailable'),
+            'verified_at' => (string) ($result['verified_at'] ?? ''),
+        ]));
     }
 
     public function isValidSlug(string $slug): bool
@@ -52,7 +104,7 @@ class theme_package_builder
                 continue;
             }
 
-            $project = is_array($metadata[$slug] ?? null) ? $metadata[$slug] : [];
+            $project = $this->metadataFor($slug);
 
             $projects[] = [
                 'slug' => $slug,
@@ -60,6 +112,11 @@ class theme_package_builder
                 'version' => (string) ($project['version'] ?? '0.0.0'),
                 'description' => (string) ($project['description'] ?? ''),
                 'signing' => is_array($project['signing'] ?? null) ? $project['signing'] : [],
+                'update_url' => $project['update_url'] ?? '',
+                'creator' => $project['creator'] ?? '',
+                'domain' => $project['domain'] ?? '',
+                'certified' => $project['certified'] ?? 'No',
+                'package_hosts' => $project['package_hosts'] ?? [],
             ];
         }
 
@@ -73,10 +130,35 @@ class theme_package_builder
 
     public function createProject(array $input): void
     {
+        $config = $this->builderConfig();
+        if (!$this->configRequired()) {
+            $input['creator'] = $config['developer'];
+            $input['domain'] = $config['domain'];
+            $input['signing_type'] = $config['algorithm'];
+            $input['signing_key_id'] = $config['key_id'];
+        }
         $slug = strtolower(trim((string) ($input['slug'] ?? '')));
         $name = trim((string) ($input['name'] ?? ''));
         $version = trim((string) ($input['version'] ?? ''));
         $description = trim((string) ($input['description'] ?? ''));
+        $domain = $this->domain((string) ($input['domain'] ?? ''));
+        $creator = trim((string) ($input['creator'] ?? ''));
+        $projectIdentity = hash('sha256', random_bytes(32));
+        $signingInput = $this->preloadCertifiedIdentity(
+            [
+                'signing_type' => (string) ($input['signing_type'] ?? 'none'),
+                'signing_sha256' => $projectIdentity,
+                'signing_fingerprint' => $projectIdentity,
+                'signing_key_id' => (string) ($input['signing_key_id'] ?? ''),
+                'signing_public_key' => '',
+            ],
+            $creator,
+            $domain
+        );
+        if ($signingInput['signing_key_id'] !== '' && ($signingInput['signing_public_key'] ?? '') === '') {
+            $signingInput['signing_type'] = 'none';
+            $signingInput['signing_key_id'] = '';
+        }
 
         $this->validateMetadata($slug, $name, $version);
 
@@ -111,14 +193,13 @@ class theme_package_builder
                 'name' => $name,
                 'version' => $version,
                 'description' => $description,
-                'signing' => [
-                    'type' => 'sha256',
-                    'fingerprint' => '',
-                    'sha256' => hash('sha256', random_bytes(32)),
-                    'key_id' => '',
-                    'public_key' => '',
-                ],
+                'domain' => $domain,
+                'creator' => $creator,
+                'certified' => 'No',
+                'signing' => $this->signingMetadata($signingInput),
             ];
+            $metadata[$slug]['certified'] = $this->certificationFor($metadata[$slug]) ? 'Yes' : 'No';
+            $this->writeThemeMetadata($slug, $metadata[$slug]);
             $this->saveProjectMetadata($metadata);
         } catch (Throwable $exception) {
             if (is_dir($root)) {
@@ -140,8 +221,9 @@ class theme_package_builder
         $this->validateMetadata($slug, $name, $version);
 
         $metadata = $this->projectMetadata();
-        $existingSigning = is_array($metadata[$slug]['signing'] ?? null)
-            ? $metadata[$slug]['signing']
+        $currentMetadata = $this->metadataFor($slug);
+        $existingSigning = is_array($currentMetadata['signing'] ?? null)
+            ? $currentMetadata['signing']
             : [];
         $signingInput = $input;
 
@@ -158,14 +240,28 @@ class theme_package_builder
                 $signingInput[$inputKey] = $existingSigning[$metadataKey] ?? '';
             }
         }
+        $signingInput = $this->preloadCertifiedIdentity(
+            $signingInput,
+            (string) ($input['creator'] ?? $currentMetadata['creator'] ?? ''),
+            (string) ($input['domain'] ?? $currentMetadata['domain'] ?? '')
+        );
 
         $metadata[$slug] = [
             'name' => $name,
             'version' => $version,
             'description' => $description,
+            'update_url' => trim((string) ($input['update_url'] ?? $currentMetadata['update_url'] ?? '')),
+            'creator' => trim((string) ($input['creator'] ?? $currentMetadata['creator'] ?? '')),
+            'domain' => $this->domain((string) ($input['domain'] ?? $currentMetadata['domain'] ?? '')),
+            'certified' => 'No',
+            'package_hosts' => isset($input['package_hosts'])
+                ? array_values(array_filter(preg_split('/[\s,]+/', strtolower(trim((string) $input['package_hosts']))) ?: []))
+                : ($currentMetadata['package_hosts'] ?? []),
             'signing' => $this->signingMetadata($signingInput),
         ];
+        $metadata[$slug]['certified'] = $this->certificationFor($metadata[$slug]) ? 'Yes' : 'No';
 
+        $this->writeThemeMetadata($slug, $metadata[$slug]);
         $this->saveProjectMetadata($metadata);
     }
 
@@ -332,8 +428,20 @@ class theme_package_builder
 
         $metadata = $this->metadataFor($slug);
 
+        try {
+            $this->validateMetadata($slug, $metadata['name'], $metadata['version']);
+        } catch (InvalidArgumentException $error) {
+            $errors[] = $error->getMessage();
+        }
+
         if ($metadata['version'] === '0.0.0') {
             $errors[] = 'Project metadata must be saved before release.';
+        }
+        try {
+            $this->domain((string) ($metadata['domain'] ?? ''));
+            $this->certified((string) ($metadata['certified'] ?? ''));
+        } catch (InvalidArgumentException $error) {
+            $errors[] = $error->getMessage();
         }
 
         return [
@@ -344,6 +452,10 @@ class theme_package_builder
 
     public function buildRelease(string $slug): string
     {
+        // Preserve extra fields while refreshing the manifest's file inventory.
+        $current = $this->metadataFor($slug);
+        $current['certified'] = $this->certificationFor($current) ? 'Yes' : 'No';
+        $this->writeThemeMetadata($slug, $current);
         $validation = $this->validateProject($slug);
 
         if (!$validation['valid']) {
@@ -385,7 +497,13 @@ class theme_package_builder
         if (!rename($temporary, $zipPath)) {
             throw new RuntimeException('ZIP finalize failed.');
         }
+        if (is_file($zipPath . '.sig') || is_link($zipPath . '.sig')) {
+            if (!unlink($zipPath . '.sig')) {
+                throw new RuntimeException('Cannot invalidate the previous release signature.');
+            }
+        }
 
+        builder_release_signer::invalidatePublication($zipPath, $slug);
         $hash = hash_file('sha256', $zipPath);
 
         if (!is_string($hash)) {
@@ -433,10 +551,17 @@ class theme_package_builder
                 continue;
             }
 
+            $release = str_ends_with($name, '.manifest.json') ? $this->readJson($path, false) : [];
+            $signature = is_array($release['signature'] ?? null) ? $release['signature'] : [];
             $artifacts[] = [
                 'name' => $name,
                 'size' => filesize($path),
                 'modified' => filemtime($path),
+                'verification' => is_array($release['verification'] ?? null) ? $release['verification'] : [],
+                'signature_algorithm' => ($release['signed'] ?? false) === true
+                    ? (string) ($release['signature_algorithm'] ?? $signature['algorithm'] ?? 'Unknown') : '',
+                'signature' => ($release['signed'] ?? false) === true
+                    ? (string) (is_string($release['signature'] ?? null) ? $release['signature'] : ($signature['value'] ?? '')) : '',
             ];
         }
 
@@ -491,117 +616,211 @@ class theme_package_builder
         }
 
         $this->saveProjectMetadata([]);
+        if (is_file($this->configFile) && !is_link($this->configFile)) unlink($this->configFile);
     }
 
-    public function certificationStatus(): array
+    public function certificationStatus(string $slug = ''): array
     {
-        $identity = $this->readJson(USERROOT . '/data/certified_developer.json', false);
-        $endpoint = trim((string) (getenv('CHAOS_CERTIFICATION_ENDPOINT') ?: ''));
         $status = [
+            'state' => 'not_verified',
             'certified' => false,
             'signing' => false,
-            'message' => 'Full theme development and unsigned packaging available; signing is not configured.',
+            'message' => 'Certification: Not Verified. Select a project and configure its developer identity; Builder and signing remain available.',
         ];
-
-        if ($endpoint === '' || $identity === []) {
+        $config = $this->builderConfig();
+        if (!$this->configRequired()) {
+            return (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+                $config['developer'], $config['domain'], 'theme', $config['algorithm'], $config['key_id']
+            );
+        }
+        if (!$this->isValidSlug($slug)) {
+            $config = $this->builderConfig();
+            if ($this->configRequired()) return $status;
+            return (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+                $config['developer'], $config['domain'], 'theme', $config['algorithm'], $config['key_id']
+            );
+        }
+        try {
+            $metadata = $this->metadataFor($slug);
+        } catch (Throwable $error) {
             return $status;
         }
-
-        if (!$this->isPublicHttps($endpoint)) {
-            $status['message'] = 'Certification endpoint must be public HTTPS.';
-            return $status;
+        $trust = is_array($metadata['signing'] ?? null) ? $metadata['signing'] : [];
+        $algorithm = strtolower((string) ($trust['algorithm'] ?? $trust['type'] ?? ''));
+        if ($algorithm === 'pgp') {
+            $algorithm = 'openpgp';
         }
-
-        $query = http_build_query(
-            [
-                'developer_id' => (string) ($identity['developer_id'] ?? ''),
-                'domain' => (string) ($identity['domain'] ?? ($_SERVER['HTTP_HOST'] ?? '')),
-                'key_id' => (string) ($identity['key_id'] ?? ''),
-                'capability' => 'theme_signing',
-            ]
+        return (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+            (string) ($metadata['creator'] ?? ''),
+            (string) ($metadata['domain'] ?? ''),
+            'theme',
+            $algorithm,
+            (string) ($trust['key_id'] ?? '')
         );
-
-        $raw = @file_get_contents(
-            $endpoint . '?' . $query,
-            false,
-            stream_context_create(
-                [
-                    'http' => [
-                        'timeout' => 5,
-                        'ignore_errors' => true,
-                    ],
-                ]
-            )
-        );
-
-        $response = is_string($raw) ? json_decode($raw, true) : null;
-
-        if (!is_array($response)) {
-            $status['message'] = 'Certification status unavailable; unsigned theme development remains available.';
-            return $status;
-        }
-
-        $status['certified'] = ($response['certified'] ?? false) === true;
-        $status['signing'] = $status['certified']
-            && ($response['signing']['theme'] ?? false) === true;
-        $status['key_id'] = (string) ($response['key_id'] ?? '');
-        $status['message'] = $status['signing']
-            ? 'Certified theme signing authorized; private keys are never retained.'
-            : 'Unsigned theme development remains fully available; theme signing is not authorized.';
-
-        return $status;
     }
 
-    public function signRelease(string $slug, string $artifact, array $upload): void
+    private function certificationFor(array $metadata): bool
     {
-        if (!$this->certificationStatus()['signing']) {
-            throw new RuntimeException('Theme signing not authorized.');
+        $trust = is_array($metadata['signing'] ?? null) ? $metadata['signing'] : [];
+        $algorithm = strtolower((string) ($trust['algorithm'] ?? $trust['type'] ?? ''));
+        if ($algorithm === 'pgp') {
+            $algorithm = 'openpgp';
         }
+        $result = (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+            (string) ($metadata['creator'] ?? $metadata['author'] ?? ''),
+            (string) ($metadata['domain'] ?? ''),
+            'theme',
+            $algorithm,
+            (string) ($trust['key_id'] ?? '')
+        );
+        return ($result['certified'] ?? false) === true && ($result['signing'] ?? false) === true;
+    }
 
-        if (!preg_match('/^[a-z][a-z0-9_]{1,62}-[0-9A-Za-z.+_-]+\.zip$/', $artifact)) {
-            throw new InvalidArgumentException('Invalid artifact.');
+    private function preloadCertifiedIdentity(array $input, string $developer, string $domain): array
+    {
+        $config = $this->builderConfig();
+        if (!$this->configRequired() && !empty($config['public_key'])
+            && $developer === $config['developer'] && strtolower($domain) === $config['domain']
+            && strtolower((string) ($input['signing_type'] ?? '')) === $config['algorithm']
+            && strtolower((string) ($input['signing_key_id'] ?? '')) === $config['key_id']) {
+            $input['signing_public_key'] = $config['public_key'];
+            $input['signing_fingerprint'] = $config['fingerprint'] ?? ($input['signing_fingerprint'] ?? '');
         }
+        $algorithm = strtolower(trim((string) ($input['signing_type'] ?? '')));
+        if ($algorithm === 'pgp') {
+            $algorithm = 'openpgp';
+        }
+        $result = (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+            $developer,
+            $domain,
+            'theme',
+            $algorithm,
+            (string) ($input['signing_key_id'] ?? '')
+        );
+        if (($result['certified'] ?? false) === true
+            && is_string($result['public_key'] ?? null)
+            && $result['public_key'] !== '') {
+            $input['signing_public_key'] = $result['public_key'];
+            if (is_string($result['fingerprint'] ?? null) && $result['fingerprint'] !== '') {
+                $input['signing_fingerprint'] = $result['fingerprint'];
+            }
+        }
+        return $input;
+    }
 
-        if (
-            ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+    public function signRelease(string $slug, string $artifact, array $upload, string $passphrase = '', string $download = ''): void
+    {
+        if (($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
             || !is_uploaded_file((string) ($upload['tmp_name'] ?? ''))
-        ) {
-            throw new RuntimeException('ChAoS MVC-issued key required.');
+            || filesize((string) $upload['tmp_name']) > self::LIMIT) {
+            throw new RuntimeException('Upload a private signing key (maximum 1 MiB).');
         }
-
-        $path = $this->artifactRoot($slug, false) . '/' . $artifact;
-
-        if (!is_file($path) || is_link($path)) {
-            throw new RuntimeException('Artifact missing.');
+        $private = file_get_contents((string) $upload['tmp_name']);
+        if (!is_string($private)) {
+            throw new RuntimeException('Cannot read private signing key.');
         }
-
-        $pem = file_get_contents((string) $upload['tmp_name']);
-        $key = is_string($pem) ? openssl_pkey_get_private($pem) : false;
-        $pem = null;
-
-        if ($key === false) {
-            throw new RuntimeException('Invalid key.');
+        try {
+            $this->signReleaseWithKey($slug, $artifact, $private, $passphrase, $download);
+        } finally {
+            $private = null;
         }
+    }
 
-        $hash = hash_file('sha256', $path);
-        $signature = '';
-
-        if (!is_string($hash) || !openssl_sign($hash, $signature, $key, OPENSSL_ALGO_SHA256)) {
-            throw new RuntimeException('Signing failed.');
+    /**
+     * Rebuild the selected project and sign the exact ZIP just created.
+     * The admin never accepts an artifact filename for this transaction.
+     */
+    public function buildAndSignRelease(string $slug, array $upload, string $passphrase = '', string $download = ''): string
+    {
+        if (($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+            || !is_uploaded_file((string) ($upload['tmp_name'] ?? ''))
+            || (int) filesize((string) $upload['tmp_name']) < 1
+            || (int) filesize((string) $upload['tmp_name']) > self::LIMIT) {
+            throw new RuntimeException('Upload a private signing key (maximum 1 MiB).');
         }
+        $private = file_get_contents((string) $upload['tmp_name']);
+        if (!is_string($private) || $private === '') {
+            throw new RuntimeException('Cannot read private signing key.');
+        }
+        try {
+            return $this->buildAndSignReleaseWithKey($slug, $private, $passphrase, $download);
+        } finally {
+            $private = null;
+        }
+    }
 
-        $this->write($path . '.sig', base64_encode($signature) . PHP_EOL);
+    /** Testable in-memory form of the current-project build-and-sign transaction. */
+    public function buildAndSignReleaseWithKey(string $slug, string $private, string $passphrase, string $download): string
+    {
+        $metadata = $this->metadataFor($slug);
+        builder_release_signer::publication($metadata, $download);
+        builder_release_signer::requireBackend(
+            builder_release_signer::algorithm((array) ($metadata['signing'] ?? []))
+        );
+        $artifact = $this->buildRelease($slug);
+        $this->signReleaseWithKey($slug, basename($artifact), $private, $passphrase, $download);
+        return $artifact;
+    }
+
+    /** Sign the exact packaged metadata, not later edits to the live project. */
+    public function signReleaseWithKey(string $slug, string $artifact, string $private, string $passphrase, string $download): void
+    {
+        if (!str_ends_with($artifact, '.zip')) {
+            throw new InvalidArgumentException('Select a release ZIP.');
+        }
+        $path = $this->artifactFile($slug, $artifact);
+        $zip = new ZipArchive();
+        if ($zip->open($path) !== true) {
+            throw new RuntimeException('Cannot read release ZIP.');
+        }
+        try {
+            $raw = $zip->getFromName($slug . '/theme.json');
+            $metadata = is_string($raw) ? json_decode($raw, true) : null;
+        } finally {
+            $zip->close();
+        }
+        if (!is_array($metadata) || ($metadata['theme'] ?? '') !== $slug) {
+            throw new RuntimeException('Release must contain its matching theme.json.');
+        }
+        $manifest = builder_release_signer::sign('theme', $metadata, $path, $download, $private, $passphrase);
+        try {
+            foreach (builder_release_signer::releaseFiles('theme', $metadata, $manifest, $path) as $outputPath => $contents) {
+                $this->write($outputPath, $contents);
+            }
+            $manifest['verification'] = builder_release_signer::verifyWrittenRelease('theme', $metadata, $manifest, $path);
+            $manifest['verification'] = builder_release_signer::stageLocalRelease('theme', $metadata, $manifest, $path);
+        } catch (Throwable $exception) {
+            builder_release_signer::invalidatePublication($path, $slug);
+            throw $exception;
+        }
+        $this->write(substr($path, 0, -4) . '.manifest.json', $this->encode($manifest));
     }
 
     private function metadataFor(string $slug): array
     {
         $metadata = $this->projectMetadata();
         $project = is_array($metadata[$slug] ?? null) ? $metadata[$slug] : [];
+        $path = $this->root($slug) . '/theme.json';
+        if (file_exists($path) || is_link($path)) {
+            $project = $this->readJson($path);
+        }
+        if (($project['signing']['type'] ?? '') === 'sha256') {
+            $project['signing']['type'] = 'none';
+        }
+        if (is_array($project['signing'] ?? null)) {
+            $project['signing']['type'] ??= $project['signing']['algorithm'] ?? 'none';
+        }
 
         return [
             'name' => (string) ($project['name'] ?? $slug),
             'version' => (string) ($project['version'] ?? '0.0.0'),
             'description' => (string) ($project['description'] ?? ''),
+            'theme' => $slug,
+            'update_url' => (string) ($project['update_url'] ?? ''),
+            'creator' => (string) ($project['creator'] ?? $project['author'] ?? ''),
+            'domain' => (string) ($project['domain'] ?? ''),
+            'certified' => (string) ($project['certified'] ?? 'No'),
+            'package_hosts' => (array) ($project['package_hosts'] ?? []),
             'signing' => is_array($project['signing'] ?? null) ? $project['signing'] : [],
         ];
     }
@@ -609,6 +828,22 @@ class theme_package_builder
     private function projectMetadata(): array
     {
         return $this->readJson($this->metadataFile, false);
+    }
+
+    private function writeThemeMetadata(string $slug, array $project): void
+    {
+        $path = $this->root($slug) . '/theme.json';
+        $existing = file_exists($path) || is_link($path) ? $this->readJson($path) : [];
+        $files = ['theme.json'];
+        foreach ($this->fileTree($slug) as $entry) {
+            if (!$entry['directory'] && $entry['path'] !== 'theme.json') {
+                $files[] = $entry['path'];
+            }
+        }
+        $local = array_replace($existing, $project, ['theme' => $slug, 'files' => $files]);
+        $local['signing']['algorithm'] = $local['signing']['algorithm'] ?? $local['signing']['type'] ?? 'none';
+        unset($local['signing']['type']);
+        $this->write($path, $this->encode($local));
     }
 
     private function saveProjectMetadata(array $metadata): void
@@ -729,26 +964,48 @@ class theme_package_builder
         }
     }
 
+    private function domain(string $value): string
+    {
+        $value = strtolower(trim($value));
+        if (!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $value)) {
+            throw new InvalidArgumentException('A valid developer domain is required.');
+        }
+        return $value;
+    }
+
+    private function certified(string $value): string
+    {
+        if (!in_array($value, ['Yes', 'No'], true)) {
+            throw new InvalidArgumentException('Certified must be Yes or No.');
+        }
+        return $value;
+    }
+
     private function signingMetadata(array $input): array
     {
-        $type = strtolower(trim((string) ($input['signing_type'] ?? 'sha256')));
+        $type = strtolower(trim((string) ($input['signing_type'] ?? 'none')));
+        if ($type === 'sha256' || $type === '') {
+            $type = 'none';
+        }
+        if ($type === 'pgp') {
+            $type = 'openpgp';
+        }
         $fingerprint = trim((string) ($input['signing_fingerprint'] ?? ''));
         $sha256 = strtolower(trim((string) ($input['signing_sha256'] ?? '')));
-        if ($sha256 === '') {
-            $sha256 = hash('sha256', random_bytes(32));
-        }
         $keyId = strtolower(trim((string) ($input['signing_key_id'] ?? '')));
-        $publicKey = preg_replace('/\s+/', '', trim((string) ($input['signing_public_key'] ?? '')));
+        $publicInput = trim((string) ($input['signing_public_key'] ?? ''));
+        $publicKey = str_starts_with($publicInput, '-----BEGIN ')
+            ? base64_encode($publicInput) : preg_replace('/\s+/', '', $publicInput);
         $publicKey = is_string($publicKey) ? $publicKey : '';
 
-        if (!in_array($type, ['sha256', 'rsa-sha256', 'openpgp'], true)) {
-            throw new InvalidArgumentException('Signing type must be SHA-256, RSA-SHA256, or OpenPGP.');
+        if (!in_array($type, ['none', 'rsa-sha256', 'openpgp'], true)) {
+            throw new InvalidArgumentException('Signature algorithm must be None, RSA-SHA256, or OpenPGP.');
         }
         if (strlen($fingerprint) > 255) {
             throw new InvalidArgumentException('Signing fingerprint must not exceed 255 characters.');
         }
-        if (preg_match('/^[a-f0-9]{64}$/', $sha256) !== 1) {
-            throw new InvalidArgumentException('Signing SHA-256 is required.');
+        if ($sha256 !== '' && preg_match('/^[a-f0-9]{64}$/', $sha256) !== 1) {
+            throw new InvalidArgumentException('Public-key SHA-256 must be 64 hexadecimal characters when provided.');
         }
         if ($keyId !== '' && preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/', $keyId) !== 1) {
             throw new InvalidArgumentException('Signing key ID is invalid.');
@@ -759,9 +1016,17 @@ class theme_package_builder
         if ($publicKey !== '' && base64_decode($publicKey, true) === false) {
             throw new InvalidArgumentException('Signing public key must be compact base64 data.');
         }
+        if ($type === 'rsa-sha256' && $publicKey !== '') {
+            $handle = @openssl_pkey_get_public(base64_decode($publicKey, true));
+            $details = $handle === false ? false : openssl_pkey_get_details($handle);
+            if (!is_array($details) || $details['type'] !== OPENSSL_KEYTYPE_RSA) {
+                throw new InvalidArgumentException('RSA signing requires a valid full public PEM or its base64 encoding.');
+            }
+            $publicKey = base64_encode($details['key']);
+        }
 
         return [
-            'type' => $type,
+            'algorithm' => $type,
             'fingerprint' => $fingerprint,
             'sha256' => $sha256,
             'key_id' => $keyId,

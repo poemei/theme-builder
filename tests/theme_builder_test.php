@@ -1,17 +1,40 @@
 <?php
 /* [AI:GPT-5.6 Sol | 2026-08-29 02:00:00 UTC] */
 require dirname(__DIR__) . '/lib/theme_package_builder.php';
+putenv('CHAOS_CERTIFICATION_ENDPOINT=https://chaos-mvc.org:444/developers/verify');
 
 $base = sys_get_temp_dir() . '/chaos-theme-builder-test-' . bin2hex(random_bytes(5));
 $themes = $base . '/user/themes';
 $releases = $base . '/releases';
 $metadata = $base . '/user/data/theme_builder_projects.json';
-$builder = new theme_package_builder($themes, $releases, $metadata);
+$builder = new theme_package_builder($themes, $releases, $metadata, $base . '/data/certification.json');
 
 $fail = static function (string $message): never {
     fwrite(STDERR, $message . PHP_EOL);
     exit(1);
 };
+$certificationClient = new builder_certification_client($base . '/certification-cache');
+$certificationResponse = [
+    'certified' => true, 'developer' => 'PM', 'domain' => 'poemei.com',
+    'certification' => 'theme', 'credential_id' => '003',
+    'signing' => [
+        'algorithm' => 'rsa-sha256', 'key_id' => 'pm-test-key',
+        'public_key' => base64_encode('public-account-key'),
+    ],
+    'private_key' => 'must-never-be-consumed',
+];
+$normalizedCertification = $certificationClient->normalize(
+    $certificationResponse, 'PM', 'poemei.com', 'theme', 'rsa-sha256', 'pm-test-key'
+);
+if (($normalizedCertification['certified'] ?? false) !== true
+    || ($normalizedCertification['public_key'] ?? '') !== base64_encode('public-account-key')
+    || array_key_exists('private_key', $normalizedCertification)) $fail('verified account signing identity was not safely normalized');
+if (($certificationClient->normalize(
+    $certificationResponse, 'PM', 'poemei.com', 'module', 'rsa-sha256', 'pm-test-key'
+)['certified'] ?? true) !== false) $fail('theme certification accepted the wrong artifact type');
+if (($certificationClient->normalize(
+    $certificationResponse, 'PM', 'poemei.com', 'theme', 'rsa-sha256', 'wrong-key'
+)['certified'] ?? true) !== false) $fail('certification accepted a signing key mismatch');
 
 try {
     $builder->createProject(
@@ -20,6 +43,8 @@ try {
             'name' => 'Classic',
             'version' => '1.0.0',
             'description' => 'Theme Builder test theme.',
+            'domain' => 'Themes.Example.com',
+            'certified' => 'Yes',
         ]
     );
 
@@ -49,10 +74,17 @@ try {
     $originalSha256 = (string) ($created['signing']['sha256'] ?? '');
 
     if (
-        ($created['signing']['type'] ?? '') !== 'sha256'
+        ($created['signing']['algorithm'] ?? '') !== 'none'
         || preg_match('/^[a-f0-9]{64}$/', $originalSha256) !== 1
+        || ($created['signing']['fingerprint'] ?? '') !== $originalSha256
     ) {
-        $fail('New project does not have canonical SHA-256 signing metadata.');
+        $fail('New project must be unsigned with matching SHA-256 and fingerprint identity metadata.');
+    }
+    $themeMetadata = json_decode((string) file_get_contents($themes . '/classic/theme.json'), true);
+    if (($themeMetadata['theme'] ?? '') !== 'classic'
+        || ($themeMetadata['domain'] ?? '') !== 'themes.example.com'
+        || ($themeMetadata['certified'] ?? '') !== 'No') {
+        $fail('Generated theme.json missing theme identity, domain, or certification selection.');
     }
 
     $head = (string) file_get_contents($themes . '/classic/inc/head.php');
@@ -92,6 +124,14 @@ try {
     if (($edited['signing']['sha256'] ?? '') !== $originalSha256) {
         $fail('Editing ordinary metadata rotated the signing SHA-256.');
     }
+    if (($edited['signing']['fingerprint'] ?? '') !== $originalSha256) {
+        $fail('Editing ordinary metadata changed the project fingerprint.');
+    }
+    $editedLocal = json_decode((string) file_get_contents($themes . '/classic/theme.json'), true);
+    if (($editedLocal['domain'] ?? '') !== 'themes.example.com'
+        || ($editedLocal['certified'] ?? '') !== 'No') {
+        $fail('Ordinary edit lost local domain or certification selection.');
+    }
 
     $builder->editProject(
         'classic',
@@ -121,8 +161,18 @@ try {
         }
 
         $releaseMetadata = json_decode((string) file_get_contents($manifest), true);
+        $zip = new ZipArchive();
+        $zip->open($artifact);
+        $packedMetadata = json_decode((string) $zip->getFromName('classic/theme.json'), true);
+        $zip->close();
+        if (($packedMetadata['signing']['algorithm'] ?? '') !== 'openpgp'
+            || ($packedMetadata['version'] ?? '') !== '1.0.1'
+            || ($releaseMetadata['signed'] ?? null) !== false
+            || ($releaseMetadata['sha256'] ?? '') !== hash_file('sha256', $artifact)) {
+            $fail('Packaged theme.json or integrity/signature state is incorrect.');
+        }
 
-        if (($releaseMetadata['signing']['type'] ?? '') !== 'openpgp') {
+        if (($releaseMetadata['signing']['algorithm'] ?? '') !== 'openpgp') {
             $fail('Release manifest did not preserve OpenPGP metadata.');
         }
 
