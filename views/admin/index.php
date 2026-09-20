@@ -50,11 +50,12 @@ if (($current['signing']['type'] ?? '') === 'pgp') {
         <section class="card border-warning mb-4">
             <div class="card-header fw-bold">One-time Builder certification setup</div>
             <form method="post" class="card-body row g-3">
-                <?= $csrf_field; ?><input type="hidden" name="action" value="save_builder_config"><input type="hidden" name="transport_key" value="<?= $escape($builder_config['transport_key'] ?? '8e4d05e20952c0c5efc24e512aa5e4cc90c905fb0ec3d6f08ad080b66244ad80'); ?>">
+                <?= $csrf_field; ?><input type="hidden" name="action" value="save_builder_config">
                 <div class="col-md-3"><label class="form-label">Developer<input class="form-control" name="developer" value="<?= $escape($builder_config['developer'] ?? 'PM'); ?>" required></label></div>
                 <div class="col-md-3"><label class="form-label">Domain<input class="form-control" name="domain" value="<?= $escape($builder_config['domain'] ?? 'poemei.com'); ?>" required></label></div>
                 <div class="col-md-3"><label class="form-label">Algorithm<select class="form-select" name="algorithm"><option value="rsa-sha256">RSA-SHA256</option><option value="openpgp">OpenPGP</option></select></label></div>
                 <div class="col-md-3"><label class="form-label">Published key ID<input class="form-control" name="key_id" value="<?= $escape($builder_config['key_id'] ?? 'pm-e3c2ffdafb9920f7'); ?>" required></label></div>
+                <div class="col-md-6"><label class="form-label">Certification transport key<input class="form-control font-monospace" type="password" name="transport_key" pattern="[a-fA-F0-9]{64}" autocomplete="new-password" <?= empty($builder_config['transport_key']) ? 'required' : ''; ?>></label><p class="form-text mb-0">Enter the installation credential supplied for certification requests. An existing saved key is retained when this field is blank.</p></div>
                 <div class="col-12"><button class="btn btn-warning">Verify and save configuration</button><p class="form-text mb-0">The public key is loaded from your verified ChAoS account. Private keys are never stored.</p></div>
             </form>
         </section>

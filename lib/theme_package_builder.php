@@ -66,7 +66,10 @@ class theme_package_builder
         $domain = strtolower(trim((string) ($input['domain'] ?? '')));
         $algorithm = strtolower(trim((string) ($input['algorithm'] ?? '')));
         $keyId = strtolower(trim((string) ($input['key_id'] ?? '')));
-        $transportKey = strtolower(trim((string) ($input['transport_key'] ?? $existing['transport_key'] ?? '')));
+        $transportKey = strtolower(trim((string) ($input['transport_key'] ?? '')));
+        if ($transportKey === '') {
+            $transportKey = strtolower(trim((string) ($existing['transport_key'] ?? '')));
+        }
         if ($developer === '' || filter_var('https://' . $domain, FILTER_VALIDATE_URL) === false
             || !in_array($algorithm, ['rsa-sha256', 'openpgp'], true)
             || !preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/', $keyId)
@@ -76,7 +79,7 @@ class theme_package_builder
         $base = ['developer' => $developer, 'domain' => $domain, 'algorithm' => $algorithm,
             'key_id' => $keyId, 'transport_key' => $transportKey];
         $this->write($this->configFile, $this->encode($base));
-        $result = (new builder_certification_client($this->releases . '/.certification-cache'))
+        $result = (new builder_certification_client($this->releases . '/.certification-cache', $this->configFile))
             ->verify($developer, $domain, 'theme', $algorithm, $keyId);
         $this->write($this->configFile, $this->encode($base + [
             'public_key' => is_string($result['public_key'] ?? null) ? $result['public_key'] : '',
@@ -629,14 +632,14 @@ class theme_package_builder
         ];
         $config = $this->builderConfig();
         if (!$this->configRequired()) {
-            return (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+            return (new builder_certification_client($this->releases . '/.certification-cache', $this->configFile))->verify(
                 $config['developer'], $config['domain'], 'theme', $config['algorithm'], $config['key_id']
             );
         }
         if (!$this->isValidSlug($slug)) {
             $config = $this->builderConfig();
             if ($this->configRequired()) return $status;
-            return (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+            return (new builder_certification_client($this->releases . '/.certification-cache', $this->configFile))->verify(
                 $config['developer'], $config['domain'], 'theme', $config['algorithm'], $config['key_id']
             );
         }
@@ -650,7 +653,7 @@ class theme_package_builder
         if ($algorithm === 'pgp') {
             $algorithm = 'openpgp';
         }
-        return (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+        return (new builder_certification_client($this->releases . '/.certification-cache', $this->configFile))->verify(
             (string) ($metadata['creator'] ?? ''),
             (string) ($metadata['domain'] ?? ''),
             'theme',
@@ -666,7 +669,7 @@ class theme_package_builder
         if ($algorithm === 'pgp') {
             $algorithm = 'openpgp';
         }
-        $result = (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+        $result = (new builder_certification_client($this->releases . '/.certification-cache', $this->configFile))->verify(
             (string) ($metadata['creator'] ?? $metadata['author'] ?? ''),
             (string) ($metadata['domain'] ?? ''),
             'theme',
@@ -690,7 +693,7 @@ class theme_package_builder
         if ($algorithm === 'pgp') {
             $algorithm = 'openpgp';
         }
-        $result = (new builder_certification_client($this->releases . '/.certification-cache'))->verify(
+        $result = (new builder_certification_client($this->releases . '/.certification-cache', $this->configFile))->verify(
             $developer,
             $domain,
             'theme',

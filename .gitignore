@@ -7,6 +7,9 @@ app/core/config.php
 test
 test/*
 
+# Theme Builder runtime identity and certification state
+/data/certification.json
+
 # ============================================================
 # Visual Studio
 # ============================================================

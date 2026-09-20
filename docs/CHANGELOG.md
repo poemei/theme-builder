@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.10] - 2026-09-20
+
+- Complete live theme-project creation, editing, validation, and bounded file operations.
+- Generate and retain versioned artifacts with verified local release history.
+- Emit the exact six-field remote update JSON consumed by ChAoS MVC Core.
+- Correct certification configuration lookup to use Theme Builder's module-owned runtime file.
+- Remove the embedded certification transport credential from the Admin interface.
+- Exclude installation-specific `data/certification.json` runtime state from source control and release packages.
+- Align documentation with canonical `signing.algorithm` metadata and the completed Builder workflow.
+- Reserve live OpenPGP round-trip qualification for a Linux server with PHP GnuPG 1.5 or newer.
+
+## [0.4.9] - 2026-09-05
+
+- Align Theme Builder certification, signing, Core verification, and artifact handling with the shared developer-tool release contract.
+
 ## [0.4.8] - 2026-09-04
 
 - Prefer PHP cURL with verified TLS for hosted certification requests and retain HTTPS streams as a fallback.

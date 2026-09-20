@@ -20,10 +20,10 @@ final class builder_certification_client
     private string $transportKey = '';
 
     public function __construct(
-        private string $cacheDirectory
+        private string $cacheDirectory,
+        ?string $configFile = null
     ) {
-        //$configPath = __DIR__ . '/../data/certifications.json';
-		$configPath = USERROOT . '/data/certification.json';
+        $configPath = $configFile ?? __DIR__ . '/../data/certification.json';
 
         $config = json_decode(
             (string) @file_get_contents($configPath),

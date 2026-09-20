@@ -13,6 +13,14 @@ $fail = static function (string $message): never {
     fwrite(STDERR, $message . PHP_EOL);
     exit(1);
 };
+$clientConfig = $base . '/client-certification.json';
+$clientTransportKey = str_repeat('a', 64);
+file_put_contents($clientConfig, json_encode(['transport_key' => $clientTransportKey], JSON_THROW_ON_ERROR));
+$configuredClient = new builder_certification_client($base . '/configured-certification-cache', $clientConfig);
+$transportKeyProperty = new ReflectionProperty($configuredClient, 'transportKey');
+if ($transportKeyProperty->getValue($configuredClient) !== $clientTransportKey) {
+    $fail('certification client did not use the supplied module-owned configuration file');
+}
 $certificationClient = new builder_certification_client($base . '/certification-cache');
 $certificationResponse = [
     'certified' => true, 'developer' => 'PM', 'domain' => 'poemei.com',

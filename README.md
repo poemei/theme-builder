@@ -102,7 +102,7 @@ Every new theme project receives a `theme.json`, updated when project settings a
 
 ```json
 {
-  "type": "none",
+  "algorithm": "none",
   "fingerprint": "",
   "sha256": "",
   "key_id": "",
@@ -110,7 +110,7 @@ Every new theme project receives a `theme.json`, updated when project settings a
 }
 ```
 
-`type` may be `none`, `rsa-sha256`, or `openpgp`. Legacy `sha256` selections are treated as unsigned. Creation generates a unique SHA-256 project identity and a matching fingerprint, preserved on ordinary settings edits. This identity is not a release signature or a PGP public-key fingerprint. Each ZIP receives its actual content hash in its release manifest and `.sha256` file. The signing SHA-256 field starts as project identity metadata and may later be replaced with your signing-key fingerprint.
+`algorithm` may be `none`, `rsa-sha256`, or `openpgp`. Legacy `sha256` selections are treated as unsigned. Creation generates a unique SHA-256 project identity and a matching fingerprint, preserved on ordinary settings edits. This identity is not a release signature or a PGP public-key fingerprint. Each ZIP receives its actual content hash in its release manifest and `.sha256` file. The signing SHA-256 field starts as project identity metadata and may later be replaced with your signing-key fingerprint.
 
 Both RSA-SHA256 and OpenPGP generate a real detached signature of Core's full release statement, including the exact download URL. OpenPGP requires PHP GnuPG 1.5+ and its backend. The release JSON embeds the base64 signature itself and displays its algorithm. A newly built ZIP is unsigned until signing succeeds. See [Core release contract](docs/CORE_RELEASE_CONTRACT.md) for publication instructions and integration tests.
 
@@ -157,11 +157,9 @@ Individual theme projects can still be deleted independently. No Core files are 
 
 ---
 
-## 🚧 Project Status
+## Project Status
 
-**Theme Builder is currently under development.**
-
-The project is being rebuilt using the established Module Builder workflow as its foundation, with module-specific behavior being replaced by the requirements of the ChAoS MVC theme system.
+Theme Builder implements the established Module Builder workflow for theme projects, including bounded file operations, validation, packaging, certification checks, release signing, and managed artifacts.
 
 ---
 
@@ -181,13 +179,13 @@ Local `theme.json` uses `signing.algorithm`, `key_id`, and the base64 public key
 
 Signing creates `<slug>.remote.json` for publication at your configured `update_url`, a binary `.zip.sig`, and an exact `-release.txt` statement. The remote JSON contains the six Core release fields, including a verified signature; the versioned `.manifest.json` remains the builder receipt. Download the files from the project's artifacts; publication to your developer domain is manual. See [the signing contract](docs/CORE_RELEASE_CONTRACT.md).
 
-### Verification gates (0.4.6)
+### Verification gates (0.4.10)
 
 The builder checks its actual PHP OpenSSL/GnuPG backend, validates the package, signs and verifies the statement, then reopens the saved files and verifies the ZIP checksum and signature using only the configured public key. It then copies the four public files (ZIP, remote JSON, binary signature, statement) into the project's managed release directory under `verified/<release-identity>/` and verifies those copies. Private keys are not copied. Conflicting staged files cause failure, not overwrite.
 
 The build receipt and artifact list report these build-time results and the local verified-copy directory. This is local-only preparation: `developer_domain: not_checked` means neither HTTP availability nor publication at `update_url` has been verified. No webroot writes, server uploads, or Core changes occur. A rebuild invalidates current signature/publication receipts but retains earlier isolated verified copies as release history.
 
-### Current-project build and sign (0.4.6)
+### Current-project build and sign (0.4.10)
 
 The Theme Builder admin does not ask for a ZIP filename. **Build and sign current theme** refreshes the selected project's `theme.json`, builds the versioned ZIP, passes that exact internally returned path to signing, and completes the existing read-back and local-copy verification gates. This prevents stale, foreign, or mistyped artifact names from entering the admin signing workflow.
 
