@@ -4,7 +4,7 @@
 
 The **ChAoS MVC Theme Builder** is a developer tool for creating, managing, and packaging themes for the ChAoS MVC platform.
 
-Current version: **0.4.10**.
+Current version: **0.5.1**.
 
 It provides a standardized development workflow so themes are built against the expected ChAoS MVC theme structure rather than assembled manually or according to developer-specific conventions.
 
