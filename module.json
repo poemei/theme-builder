@@ -1,7 +1,7 @@
 {
     "module": "theme_builder",
     "name": "Theme Builder",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "description": "Admin-only ChAoS MVC theme workspace and release builder.",
 	"creator": "PM",
   "domain": "www.poemei.com",

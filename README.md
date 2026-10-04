@@ -4,7 +4,7 @@
 
 The **ChAoS MVC Theme Builder** is a developer tool for creating, managing, and packaging themes for the ChAoS MVC platform.
 
-Current version: **0.5.1**.
+Current version: **0.5.2**.
 
 It provides a standardized development workflow so themes are built against the expected ChAoS MVC theme structure rather than assembled manually or according to developer-specific conventions.
 
@@ -84,6 +84,22 @@ ambiguous dependency.
 
 Bootstrap remains vendor code. Put theme-specific presentation rules in
 `assets/css/site.css` and theme-specific behavior in `assets/js/site.js`.
+
+### Authentication-aware navigation
+
+Generated navigation is session-aware. Guests receive Login and Register
+links. Logged-in users receive a POST-only Logout control, and users at the
+ChAoS MVC Admin level receive the Admin link. The Logout form carries the
+session CSRF token; the generated navigation initializes that token when a
+logged-in session does not already have one. All token output is escaped.
+
+The generated checks use the established ChAoS MVC session contract:
+
+```text
+user_id present       -> logged in
+user_level >= 7       -> Admin link
+csrf_token            -> POST /logout verification
+```
 
 ---
 
@@ -217,13 +233,13 @@ Local `theme.json` uses `signing.algorithm`, `key_id`, and the base64 public key
 
 Signing creates `<slug>.remote.json` for publication at your configured `update_url`, a binary `.zip.sig`, and an exact `-release.txt` statement. The remote JSON contains the six Core release fields, including a verified signature; the versioned `.manifest.json` remains the builder receipt. Download the files from the project's artifacts; publication to your developer domain is manual. See [the signing contract](docs/CORE_RELEASE_CONTRACT.md).
 
-### Verification gates (0.5.1)
+### Verification gates (0.5.2)
 
 The builder checks its actual PHP OpenSSL/GnuPG backend, validates the package, signs and verifies the statement, then reopens the saved files and verifies the ZIP checksum and signature using only the configured public key. It then copies the four public files (ZIP, remote JSON, binary signature, statement) into the project's managed release directory under `verified/<release-identity>/` and verifies those copies. Private keys are not copied. Conflicting staged files cause failure, not overwrite.
 
 The build receipt and artifact list report these build-time results and the local verified-copy directory. This is local-only preparation: `developer_domain: not_checked` means neither HTTP availability nor publication at `update_url` has been verified. No webroot writes, server uploads, or Core changes occur. A rebuild invalidates current signature/publication receipts but retains earlier isolated verified copies as release history.
 
-### Current-project build and sign (0.5.1)
+### Current-project build and sign (0.5.2)
 
 The Theme Builder admin does not ask for a ZIP filename. **Build and sign current theme** refreshes the selected project's `theme.json`, builds the versioned ZIP, passes that exact internally returned path to signing, and completes the existing read-back and local-copy verification gates. This prevents stale, foreign, or mistyped artifact names from entering the admin signing workflow.
 

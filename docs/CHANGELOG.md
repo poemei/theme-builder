@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.2] - 2026-10-04
+
+- Generate session-aware theme navigation with guest Login/Register links,
+  authenticated Logout, and a conditional Admin link for the established
+  ChAoS MVC Admin access level.
+- Make generated Logout use POST with an escaped CSRF token, initializing the
+  session token when required.
+- Add theme-local navigation-button styling so the secure Logout control
+  behaves visually like the other navigation links.
+
 ## [0.5.1] - 2026-10-04
 
 - Package Bootstrap 5.3.8 CSS and JavaScript inside Theme Builder and copy both

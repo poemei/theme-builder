@@ -1244,14 +1244,47 @@ PHP
         $timestamp = gmdate('Y-m-d H:i:s');
 
         return str_replace('__TIMESTAMP__', $timestamp, <<<'PHP'
-<?php /* [AI:GPT-5.6 Sol | __TIMESTAMP__ UTC] */ ?>
+<?php
+/* [AI:GPT-5.6 Sol | __TIMESTAMP__ UTC] */
+$SITE = $GLOBALS['SITE'] ?? ($SITE ?? []);
+$siteName = (string) ($SITE['name'] ?? 'Chaos MVC');
+$loggedIn = isset($_SESSION['user_id']);
+$isAdmin = $loggedIn && (int) ($_SESSION['user_level'] ?? 0) >= 7;
+
+if ($loggedIn && empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+?>
 <header class="theme-header">
     <a class="theme-brand" href="/">
-        <?= htmlspecialchars($SITE['name'] ?? 'Chaos MVC', ENT_QUOTES, 'UTF-8'); ?>
+        <?= htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8'); ?>
     </a>
 
     <nav class="theme-nav" aria-label="Primary navigation">
         <a href="/">Home</a>
+        <a href="/posts">Posts</a>
+
+        <?php if ($loggedIn): ?>
+            <?php if ($isAdmin): ?>
+                <a href="/admin">Admin</a>
+            <?php endif; ?>
+
+            <form action="/logout" method="POST">
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="<?= htmlspecialchars(
+                        (string) $_SESSION['csrf_token'],
+                        ENT_QUOTES,
+                        'UTF-8'
+                    ); ?>"
+                >
+                <button class="theme-nav-button" type="submit">Logout</button>
+            </form>
+        <?php else: ?>
+            <a href="/login">Login</a>
+            <a href="/register">Register</a>
+        <?php endif; ?>
     </nav>
 </header>
 <?php /* [End AI:GPT-5.6 Sol] */ ?>
@@ -1374,8 +1407,28 @@ img {
 
 .theme-nav {
     display: flex;
+    align-items: center;
     flex-wrap: wrap;
     gap: var(--space-3);
+}
+
+.theme-nav form {
+    margin: 0;
+}
+
+.theme-nav-button {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--accent);
+}
+
+.theme-nav-button:hover,
+.theme-nav-button:focus-visible {
+    background: none;
+    color: var(--accent-strong);
+    text-decoration: underline;
 }
 
 .theme-main {
