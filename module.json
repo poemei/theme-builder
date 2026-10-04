@@ -1,7 +1,7 @@
 {
     "module": "theme_builder",
     "name": "Theme Builder",
-    "version": "0.4.10",
+    "version": "0.5.1",
     "description": "Admin-only ChAoS MVC theme workspace and release builder.",
 	"creator": "PM",
   "domain": "www.poemei.com",
@@ -19,6 +19,8 @@
         "lib/theme_package_builder.php",
         "lib/builder_release_signer.php",
         "lib/builder_certification_client.php",
+        "assets/vendor/bootstrap/css/bootstrap.min.css",
+        "assets/vendor/bootstrap/js/bootstrap.bundle.min.js",
         "data/.gitkeep",
         "views/admin/index.php",
         "docs/CHANGELOG.md",

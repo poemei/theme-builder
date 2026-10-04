@@ -9,6 +9,7 @@ if (!class_exists('builder_certification_client', false)) {
 class theme_package_builder
 {
     private const LIMIT = 1048576;
+    private const BOOTSTRAP_VERSION = '5.3.8';
     private const TEXT_EXTENSIONS = [
         'php',
         'json',
@@ -178,6 +179,8 @@ class theme_package_builder
                     '/assets/icons',
                     '/assets/img',
                     '/assets/js',
+                    '/assets/vendor/bootstrap/css',
+                    '/assets/vendor/bootstrap/js',
                     '/inc',
                 ] as $directory
             ) {
@@ -186,6 +189,7 @@ class theme_package_builder
 
             $this->write($root . '/assets/css/site.css', $this->starterCss());
             $this->write($root . '/assets/js/site.js', $this->starterJs());
+            $this->installBootstrap($root);
             $this->write($root . '/inc/head.php', $this->starterHead());
             $this->write($root . '/inc/nav.php', $this->starterNav());
             $this->write($root . '/inc/foot.php', $this->starterFoot());
@@ -455,6 +459,10 @@ class theme_package_builder
 
     public function buildRelease(string $slug): string
     {
+        $root = $this->root($slug);
+        $this->installBootstrap($root);
+        $this->ensureBootstrapReferences($root);
+
         // Preserve extra fields while refreshing the manifest's file inventory.
         $current = $this->metadataFor($slug);
         $current['certified'] = $this->certificationFor($current) ? 'Yes' : 'No';
@@ -1219,6 +1227,7 @@ $ogType = $og['type'] ?? 'website';
     <meta name="twitter:description" content="<?= htmlspecialchars($ogDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="twitter:image" content="<?= htmlspecialchars($ogImage, ENT_QUOTES, 'UTF-8'); ?>">
 
+    <link rel="stylesheet" href="<?= theme::assetUrl('vendor/bootstrap/css/bootstrap.min.css'); ?>">
     <link rel="stylesheet" href="<?= theme::assetUrl('css/site.css'); ?>">
     <link rel="icon" type="image/png" href="<?= theme::assetUrl('icons/icon.png'); ?>">
 </head>
@@ -1274,6 +1283,7 @@ PHP
 </footer>
 </div>
 
+<script src="<?= theme::assetUrl('vendor/bootstrap/js/bootstrap.bundle.min.js'); ?>"></script>
 <script src="<?= theme::assetUrl('js/site.js'); ?>"></script>
 </body>
 </html>
@@ -1491,6 +1501,61 @@ CSS
 /* [End AI:GPT-5.6 Sol] */
 JS
         );
+    }
+
+    private function installBootstrap(string $themeRoot): void
+    {
+        $source = dirname(__DIR__) . '/assets/vendor/bootstrap';
+
+        foreach (['css/bootstrap.min.css', 'js/bootstrap.bundle.min.js'] as $relative) {
+            $sourceFile = $source . '/' . $relative;
+
+            if (!is_file($sourceFile) || is_link($sourceFile)) {
+                throw new RuntimeException(
+                    'Bundled Bootstrap ' . self::BOOTSTRAP_VERSION . ' asset missing: ' . $relative
+                );
+            }
+
+            $contents = file_get_contents($sourceFile);
+
+            if (!is_string($contents)) {
+                throw new RuntimeException('Bundled Bootstrap asset unreadable: ' . $relative);
+            }
+
+            $this->writeBinary($themeRoot . '/assets/vendor/bootstrap/' . $relative, $contents);
+        }
+    }
+
+    private function ensureBootstrapReferences(string $themeRoot): void
+    {
+        $headPath = $themeRoot . '/inc/head.php';
+        $footPath = $themeRoot . '/inc/foot.php';
+        $css = "    <link rel=\"stylesheet\" href=\"<?= theme::assetUrl('vendor/bootstrap/css/bootstrap.min.css'); ?>\">";
+        $js = "<script src=\"<?= theme::assetUrl('vendor/bootstrap/js/bootstrap.bundle.min.js'); ?>\"></script>";
+
+        $head = is_file($headPath) ? file_get_contents($headPath) : false;
+        if (is_string($head) && !str_contains($head, 'vendor/bootstrap/css/bootstrap.min.css')) {
+            $siteCss = "    <link rel=\"stylesheet\" href=\"<?= theme::assetUrl('css/site.css'); ?>\">";
+            $updated = str_contains($head, $siteCss)
+                ? str_replace($siteCss, $css . PHP_EOL . $siteCss, $head)
+                : str_replace('</head>', $css . PHP_EOL . '</head>', $head);
+            if ($updated === $head) {
+                throw new RuntimeException('Theme head.php has no safe Bootstrap CSS insertion point.');
+            }
+            $this->write($headPath, $updated);
+        }
+
+        $foot = is_file($footPath) ? file_get_contents($footPath) : false;
+        if (is_string($foot) && !str_contains($foot, 'vendor/bootstrap/js/bootstrap.bundle.min.js')) {
+            $siteJs = "<script src=\"<?= theme::assetUrl('js/site.js'); ?>\"></script>";
+            $updated = str_contains($foot, $siteJs)
+                ? str_replace($siteJs, $js . PHP_EOL . $siteJs, $foot)
+                : str_replace('</body>', $js . PHP_EOL . '</body>', $foot);
+            if ($updated === $foot) {
+                throw new RuntimeException('Theme foot.php has no safe Bootstrap JavaScript insertion point.');
+            }
+            $this->write($footPath, $updated);
+        }
     }
 
     private function starterIcon(): string

@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.1] - 2026-10-04
+
+- Package Bootstrap 5.3.8 CSS and JavaScript inside Theme Builder and copy both
+  assets into every newly created theme.
+- Backfill the packaged Bootstrap assets and missing local header/footer
+  references whenever an existing theme is built.
+- Generate theme headers and footers that load Bootstrap from the theme's own
+  asset directory, removing the runtime jsDelivr dependency.
+- Keep Builder Admin styling on the normal theme render path, now backed by the
+  active theme's packaged Bootstrap assets instead of a third-party CDN.
+
+## [0.5.0] - 2026-10-04
+
+- Make the Admin interface's Bootstrap dependency explicit instead of relying
+  on the active site theme to provide it.
+- Load the current Bootstrap 5.3.8 CSS after the rendered Admin header and the
+  matching Bootstrap bundle immediately before the rendered Admin footer.
+- Pin both CDN resources to the official version-specific Subresource Integrity
+  hashes and anonymous CORS mode.
+- Validate the integration with eight Admin asset-order/integrity checks, the
+  existing Theme Builder behavior suite, complete PHP syntax checks, manifest
+  completeness, and Git whitespace validation.
+
 ## [0.4.10] - 2026-09-20
 
 - Complete live theme-project creation, editing, validation, and bounded file operations.

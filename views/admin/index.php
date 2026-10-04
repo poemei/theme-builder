@@ -24,7 +24,7 @@ if (($current['signing']['type'] ?? '') === 'pgp') {
 <main class="container-fluid py-4">
     <div class="d-flex justify-content-between mb-4">
         <div>
-            <h1>Theme Builder <small class="text-muted">0.4.10</small></h1>
+            <h1>Theme Builder <small class="text-muted">0.5.1</small></h1>
             <p>
                 Live source: <code>user/themes/&lt;slug&gt;/</code>.
                 Output: root <code>/releases/&lt;slug&gt;/</code>.

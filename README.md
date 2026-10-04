@@ -4,7 +4,7 @@
 
 The **ChAoS MVC Theme Builder** is a developer tool for creating, managing, and packaging themes for the ChAoS MVC platform.
 
-Current version: **0.4.10**.
+Current version: **0.5.1**.
 
 It provides a standardized development workflow so themes are built against the expected ChAoS MVC theme structure rather than assembled manually or according to developer-specific conventions.
 
@@ -45,6 +45,46 @@ Generated themes are stored under the ChAoS MVC user theme directory:
 /user/themes/<theme-slug>/
 ```
 
+Each new project starts with this structure:
+
+```text
+<theme-slug>/
+├── assets/
+│   ├── css/site.css
+│   ├── icons/icon.png
+│   ├── img/
+│   ├── js/site.js
+│   └── vendor/bootstrap/
+│       ├── css/bootstrap.min.css
+│       └── js/bootstrap.bundle.min.js
+├── inc/
+│   ├── head.php
+│   ├── nav.php
+│   └── foot.php
+└── theme.json
+```
+
+### Packaged Bootstrap
+
+Theme Builder packages Bootstrap **5.3.8** with the theme. It does not fetch
+Bootstrap from jsDelivr, query a remote version service, or depend on a CDN when
+the site renders.
+
+The generated `inc/head.php` loads Bootstrap CSS before `css/site.css`, allowing
+the theme stylesheet to intentionally override Bootstrap. The generated
+`inc/foot.php` loads `bootstrap.bundle.min.js` before `js/site.js`. The bundle
+includes Bootstrap's required Popper support.
+
+When an existing theme is built, Theme Builder restores the packaged Bootstrap
+files and adds either missing local asset reference at a safe point in
+`inc/head.php` or `inc/foot.php`. It never inserts a second copy when the local
+reference is already present. If a customized include has no safe insertion
+point, the build stops with an error instead of producing a theme with an
+ambiguous dependency.
+
+Bootstrap remains vendor code. Put theme-specific presentation rules in
+`assets/css/site.css` and theme-specific behavior in `assets/js/site.js`.
+
 ---
 
 ## 🛠 Development Workflow
@@ -54,13 +94,11 @@ The Theme Builder workflow is designed around a simple progression:
 ```text
 Create Project
       ↓
-Build Theme
-      ↓
 Edit & Test
       ↓
 Validate
       ↓
-Create Artifact
+Build Artifact
       ↓
 Certify / Sign
       ↓
@@ -179,13 +217,13 @@ Local `theme.json` uses `signing.algorithm`, `key_id`, and the base64 public key
 
 Signing creates `<slug>.remote.json` for publication at your configured `update_url`, a binary `.zip.sig`, and an exact `-release.txt` statement. The remote JSON contains the six Core release fields, including a verified signature; the versioned `.manifest.json` remains the builder receipt. Download the files from the project's artifacts; publication to your developer domain is manual. See [the signing contract](docs/CORE_RELEASE_CONTRACT.md).
 
-### Verification gates (0.4.10)
+### Verification gates (0.5.1)
 
 The builder checks its actual PHP OpenSSL/GnuPG backend, validates the package, signs and verifies the statement, then reopens the saved files and verifies the ZIP checksum and signature using only the configured public key. It then copies the four public files (ZIP, remote JSON, binary signature, statement) into the project's managed release directory under `verified/<release-identity>/` and verifies those copies. Private keys are not copied. Conflicting staged files cause failure, not overwrite.
 
 The build receipt and artifact list report these build-time results and the local verified-copy directory. This is local-only preparation: `developer_domain: not_checked` means neither HTTP availability nor publication at `update_url` has been verified. No webroot writes, server uploads, or Core changes occur. A rebuild invalidates current signature/publication receipts but retains earlier isolated verified copies as release history.
 
-### Current-project build and sign (0.4.10)
+### Current-project build and sign (0.5.1)
 
 The Theme Builder admin does not ask for a ZIP filename. **Build and sign current theme** refreshes the selected project's `theme.json`, builds the versioned ZIP, passes that exact internally returned path to signing, and completes the existing read-back and local-copy verification gates. This prevents stale, foreign, or mistyped artifact names from entering the admin signing workflow.
 
